@@ -24,15 +24,15 @@ if use_separate_sessions
 else
     s2 = s;
 end
+
 s2.Rate = fs;
 s2.IsContinuous = true;
 % Analog output
-t=addAnalogOutputChannel(s2,device.ID,'ao0', 'Voltage');
-
+t = addAnalogOutputChannel(s2, device.ID, 'ao0', 'Voltage');
 
 %% Analog input
 % removeChannel(s,2)
-ch = addAnalogInputChannel(s,device.ID,[0 1 ], 'Voltage');
+ch = addAnalogInputChannel(s, device.ID, [0 1], 'Voltage');
 figure(1)
 lh = addlistener(s, 'DataAvailable', @(src, event) plot(event.TimeStamps, event.Data));
 s.NotifyWhenDataAvailableExceeds = fs;
@@ -42,23 +42,26 @@ disp('added analog input channel and listener');
 % queue analog output data
 
 duration_in_seconds = 1; tic;
-queueOutputData(s2,linspace(-1, 1, duration_in_seconds*fs)');
+queueOutputData(s2, linspace(-1, 1, duration_in_seconds * fs)');
 disp('analog output queued'); toc
 
 tic
 % 79 seconds for 100 Hz x 600 m or 1000 Hz * 60m
 % 19 seconds for 100 Hz 3 60 m
 startBackground(s); % there is a slight delay between these two starts
+
 if use_separate_sessions
     startBackground(s2);
 end
+
 toc
 %%
 figure(1);
 disp('running in background...');
 
-while(true)
-    if(s2.IsRunning)
+while (true)
+
+    if (s2.IsRunning)
         disp('is running');
     else
         stop(s);
@@ -66,8 +69,10 @@ while(true)
         disp('stopped');
         break
     end
+
     pause(0.1);
 end
+
 %% Stop session
 stop(s);
 stop(s2);
@@ -75,5 +80,4 @@ stop(s2);
 disp('stopped');
 xlabel('time (s)');
 ylabel('voltage (V)');
-legend('AI1','AI2');
-
+legend('AI1', 'AI2');
