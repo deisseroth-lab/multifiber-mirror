@@ -337,23 +337,32 @@ function calibframe_btn_Callback(hObject, eventdata, handles)
     guidata(hObject, handles);
 end
 
-% Get file paths for saving out put (auto-increment the file counter).
-function [saveFile, calibFile, logAIFile] = get_save_paths(handles)
-    [~, basename, ext] = fileparts(handles.savefile);
-    n = 0;
+function prefix = get_save_prefix(saveprefix)
 
-    while exist(fullfile(handles.savepath, [basename sprintf('_%03d', n) ext]), 'file') == 2
-        n = n + 1;
+    for runNumber = 0:1000
+        directory = fullfile([saveprefix sprintf('_run%03d', runNumber)]);
+
+        if exist(directory, 'directory') ~= 2
+            [~, dirbase, ~] = fileparts(directory);
+            mkdir(directory);
+            prefix = fullfile(directory, [dirbase '_']);
+            return
+        end
+
+        error('More than 1000 runs detected.  Something fishy is going on')
+
     end
 
-    saveFile = fullfile(handles.savepath, [basename sprintf('_%03d', n) ext]);
-    calibFile = fullfile(handles.savepath, [basename sprintf('_%03d_calibration', n) '.jpg']);
-    logAIFile = fullfile(handles.savepath, [basename sprintf('_%03d_logAI', n) '.csv']);
+end
 
-    if exist(logAIFile, 'file') == 2
-        delete(logAIFile);
+function savePath = get_save_path(prefix, kind, ext, optionalChunk)
+    savePath = prefix + kind;
+
+    if nargin > 3
+        savePath = savePath + sprintf('_chunk%03d', optionalChunk);
     end
 
+    savePath = savePath + ext;
 end
 
 % Validate settings
@@ -472,9 +481,14 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
         % Re-label button
         set(hObject, 'String', 'Stop acquisition');
 
-        if settings_are_valid(handles)
-            % Get save paths
-            [saveFile, calibFile, logAIFile] = get_save_paths(handles);
+        if settings_are_valid(handles);
+
+            save_prefix = get_save_prefix(handles.saveprefix);
+
+            calibFile = get_save_path(save_prefix, 'calibration', '.jpg');
+            imwrite(handles.calibImg.cdata, calibFile, 'JPEG');
+
+            logAIFile = get_save_path(save_prefix, 'logAI', '.csv');
 
             if (ai_logging_is_enabled(handles))
                 % Add listener for analog input logging
@@ -493,8 +507,11 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
                 darkOffset = applyMasks(handles.masks, darkframe);
             end
 
+            chunkSize = 1000;
+
             nMasks = size(handles.masks, 3);
-            ref = zeros(1, nMasks); sig = zeros(1, nMasks);
+            ref = circularBuffer(zeros(chunkSize, nMasks));
+            sig = circularBuffer(zeros(chunkSize, nMasks));
             i = 0;
             j = 0;
             rate = str2double(get(handles.rate_txt, 'String'));
@@ -554,6 +571,9 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
                 disp('Waiting for user to end acquisition...');
             end
 
+            metadataFile = get_save_path(save_prefix, 'data', '.mat')
+            save(metadataFile, handles.labels, rate, '-v7.3')
+
             while get(hObject, 'Value')
 
                 if ~s.IsRunning
@@ -599,6 +619,14 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
                 else % signal channel
                     sig(j, :) = avgs;
                     handles.callback(avgs, 'signal');
+                end
+
+                if mod(j, chunkSize) == 0
+                    chunk = int(j / chunkSize) - 1;
+                    first = 1 + chunk * chunkSize;
+                    last = first + chunkSize;
+                    saveFile = get_save_path(directory, 'data', '.mat', chunk);
+                    save(saveFile, sig(first:last, :), ref(first:last, :), '-v7.3');
                 end
 
                 % Plotting
@@ -681,9 +709,7 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
             set(handles.elapsed_txt, 'String', datestr(0, 'HH:MM:SS'));
 
             % Save data
-            if j > 0
-                save_data(sig(1:j, :), ref(1:j, :), handles.labels, rate, handles.calibImg.cdata, saveFile, calibFile);
-            else
+                if j == 0
                 warning(['No frames captured or saved! Check camera trigger connection is ' handles.camCh.Terminal '. Then restart MATLAB.']); beep;
             end
 
@@ -699,15 +725,6 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
 
         % Re-label button
         set(hObject, 'String', 'Acquire data');
-    end
-
-end
-
-function save_data(sig, ref, labels, framerate, cdata, saveFile, calibFile)
-    save(saveFile, 'sig', 'ref', 'labels', 'framerate', '-v7.3');
-
-    if any(cdata(:))
-        imwrite(cdata, calibFile, 'JPEG');
     end
 
 end
