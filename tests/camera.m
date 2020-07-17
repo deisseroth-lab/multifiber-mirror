@@ -7,7 +7,7 @@ videoInputName = 'hamamatsu';
 vid = videoinput(videoInputName, 1);
 src = getselectedsource(vid);
 
-vid.FramesPerTrigger = 1; 
+vid.FramesPerTrigger = 1;
 vid.TriggerRepeat = Inf;
 triggerconfig(vid, 'hardware', 'RisingEdge', 'EdgeTrigger');
 vid.ROIPosition = [10 10 400 400];
@@ -26,6 +26,7 @@ ch.DutyCycle = 0.1;
 cap = 0;
 start(vid);
 s.startBackground();
+
 while cap < 10
     raw = getdata(vid, 1, 'uint16');
     image = double(raw);

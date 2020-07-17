@@ -21,22 +21,22 @@ disp(['Camera should be connected to ' camCh.Terminal]);
 %ch = addDigitalChannel(s,device.ID, 'Port0/Line2:3', 'OutputOnly');
 
 %% Analog output
-t=addAnalogOutputChannel(s,device.ID,'ao0', 'Voltage');
-t2=addAnalogOutputChannel(s,device.ID,'ao1', 'Voltage');
+t = addAnalogOutputChannel(s, device.ID, 'ao0', 'Voltage');
+t2 = addAnalogOutputChannel(s, device.ID, 'ao1', 'Voltage');
 %%   remove % weird bug -- must add data to queue first.
-queueOutputData(s,repmat(linspace(-1, 1, 1*fs)',[1 2]));
+queueOutputData(s, repmat(linspace(-1, 1, 1 * fs)', [1 2]));
 removeChannel(s, 3);
 s.IsContinuous = true;
 %% queue analog output data
-queueOutputData(s,repmat(linspace(-1, 1, 1*fs)',[1 2]));
+queueOutputData(s, repmat(linspace(-1, 1, 1 * fs)', [1 2]));
 disp('analog output queued');
 
 %% keep queueing analog output data
-lh_ao=addlistener(s,'DataRequired', ...
-                @(src,event) src.queueOutputData(repmat(linspace(-1, 1, 1*fs/4)',[1 2])));
+lh_ao = addlistener(s, 'DataRequired', ...
+    @(src, event) src.queueOutputData(repmat(linspace(-1, 1, 1 * fs / 4)', [1 2])));
 % lh_ao.Enabled = false; % to disable
 %% Analog input
-ch = addAnalogInputChannel(s,device.ID,[0 1 ], 'Voltage');
+ch = addAnalogInputChannel(s, device.ID, [0 1], 'Voltage');
 % need to store DAQ measurements from callback function
 lh = addlistener(s, 'DataAvailable', @(src, event) plot(event.TimeStamps, event.Data));
 s.NotifyWhenDataAvailableExceeds = fs;
@@ -47,15 +47,17 @@ figure(1);
 disp('running in background...');
 
 for i = 1:10
-    if(s.IsRunning)
+
+    if (s.IsRunning)
         disp('is running');
     else
         disp('stopped');
     end
+
     pause(0.2);
 end
+
 %% Stop session
 stop(s);
 close(1);
 disp('stopped');
-
