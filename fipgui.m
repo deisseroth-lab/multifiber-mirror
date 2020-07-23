@@ -340,9 +340,9 @@ function [dataFile, calibFile, logAIFile] = get_save_paths(handles)
     data_path = fullfile(base_path, sunet_id, base_name);
     mkdir(data_path);
 
-    dataFile = fullfile(data_path, [basename '_data.mat']);
-    calibFile = fullfile(data_path, [basename '_calibration.jpg']);
-    logAIFile = fullfile(data_path, [basename '_logAI.csv']);
+    dataFile = fullfile(data_path, [base_name '_data.mat']);
+    calibFile = fullfile(data_path, [base_name '_calibration.jpg']);
+    logAIFile = fullfile(data_path, [base_name '_logAI.csv']);
 end
 
 % Validate settings
