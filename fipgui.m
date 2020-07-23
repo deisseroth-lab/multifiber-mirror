@@ -328,21 +328,21 @@ function calibframe_btn_Callback(hObject, eventdata, handles)
     guidata(hObject, handles);
 end
 
-function [acquisitionName, dataFile, metadataFile, calibFile, logAIFile] = get_save_details(handles)
+function [acquisitionPath, dataFile, metadataFile, calibFile, logAIFile] = get_save_details(handles)
     base_path = get(handles.savepath, 'String');
     sunet_id = get(handles.sunet_id, 'String');
 
     experiment = get(handles.experiment, 'String');
     dt = datestr(datetime('now'), 'yyyymmdd-HHMMSS');
-    acquisitionName = [experiment '_' dt];
+    baseName = [experiment '_' dt];
     
-    data_path = fullfile(base_path, sunet_id, acquisitionName);
-    mkdir(data_path);
+    acquisitionPath = fullfile(base_path, sunet_id, baseName);
+    mkdir(acquisitionPath);
 
-    dataFile = fullfile(data_path, [acquisitionName '_data.mat']);
-    metadataFile = fullfile(data_path, [acquisitionName '_metadata.mat']);
-    calibFile = fullfile(data_path, [acquisitionName '_calibration.jpg']);
-    logAIFile = fullfile(data_path, [acquisitionName '_logAI.csv']);
+    dataFile = fullfile(acquisitionPath, [baseName '_data.mat']);
+    metadataFile = fullfile(acquisitionPath, [baseName '_metadata.mat']);
+    calibFile = fullfile(acquisitionPath, [baseName '_calibration.jpg']);
+    logAIFile = fullfile(acquisitionPath, [baseName '_logAI.csv']);
 end
 
 % Validate settings
@@ -468,8 +468,8 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
         if settings_are_valid(handles)
             rate = str2double(get(handles.rate_txt, 'String'));
 
-            [acquisition_name, dataFile, metadataFile, calibFile, logAIFile] = get_save_details(handles);
-            set(handles.acquisition_name, 'String', acquisition_name);
+            [acquisitionDir, dataFile, metadataFile, calibFile, logAIFile] = get_save_details(handles);
+            set(handles.acquisition_name, 'String', acquisitionDir);
 
             save_metadata(metadataFile, handles.labels, rate);
             save_calibration(calibFile, handles.calibImg.cdata);
@@ -1132,7 +1132,7 @@ function viewlog_btn_Callback(hObject, eventdata, handles)
     % hObject    handle to viewlog_btn (see GCBO)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
-    [acquisitionName, dataFile, metadataFile, calibFile, logAIFile] = get_save_details(handles);
+    [acquisitionDir, dataFile, metadataFile, calibFile, logAIFile] = get_save_details(handles);
     plotLogFile(logAIFile);
 end
 
