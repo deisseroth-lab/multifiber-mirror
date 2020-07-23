@@ -22,7 +22,7 @@ function varargout = fipgui(varargin)
 
     % Edit the above text to modify the response to help fipgui
 
-    % Last Modified by GUIDE v2.5 07-Dec-2015 14:59:52
+    % Last Modified by GUIDE v2.5 23-Jul-2020 09:16:54
 
     % Begin initialization code - DO NOT EDIT
     gui_Singleton = 1;
@@ -64,8 +64,6 @@ function fipgui_OpeningFcn(hObject, eventdata, handles, varargin)
     % Defaults
     handles.crop_roi = false;
     handles.masks = false;
-    handles.savepath = '.';
-    handles.savefile = get(handles.save_txt, 'String');
     handles.callback_path = false;
     handles.callback = @(x, y) false;
     handles.ao_waveform_path = false;
@@ -111,14 +109,9 @@ function fipgui_OpeningFcn(hObject, eventdata, handles, varargin)
 
     set(handles.rate_txt, 'String', rate_txt);
     set(handles.cam_pop, 'Value', getpref(grp, 'cam_pop', get(handles.cam_pop, 'Value')));
-    save_txt = getpref(grp, 'save_txt', get(handles.save_txt, 'String'));
 
-    if numel(save_txt) > 1 && save_txt(1) == '0'
-        save_txt = '';
-        warning(['Invalid save text, setting to default value of ' save_txt]);
-    end
+    set(handles.savepath, 'String', getpref(grp, 'savepath', get(handles.savepath, 'String')));
 
-    set(handles.save_txt, 'String', save_txt);
     ao_waveform_txt = getpref(grp, 'ao_waveform_txt', get(handles.ao_waveform_txt, 'String'));
 
     if numel(ao_waveform_txt) > 1 && ao_waveform_txt(1) == '0'
@@ -207,10 +200,6 @@ function fipgui_OpeningFcn(hObject, eventdata, handles, varargin)
     % Some more updates based on the defaults loaded earlier
     % Update rate
     rate_txt_Callback(handles.rate_txt, [], handles);
-    % Update save file information
-    [pathname, filename, ext] = fileparts(get(handles.save_txt, 'String'));
-    handles.savepath = pathname;
-    handles.savefile = [filename ext];
 
     % Update callback file information
     [pathname, filename] = fileparts(get(handles.callback_txt, 'String'));
@@ -338,22 +327,10 @@ function calibframe_btn_Callback(hObject, eventdata, handles)
 end
 
 % Get file paths for saving out put (auto-increment the file counter).
-function [saveFile, calibFile, logAIFile] = get_save_paths(handles)
-    [~, basename, ext] = fileparts(handles.savefile);
-    n = 0;
-
-    while exist(fullfile(handles.savepath, [basename sprintf('_%03d', n) ext]), 'file') == 2
-        n = n + 1;
-    end
-
-    saveFile = fullfile(handles.savepath, [basename sprintf('_%03d', n) ext]);
-    calibFile = fullfile(handles.savepath, [basename sprintf('_%03d_calibration', n) '.jpg']);
-    logAIFile = fullfile(handles.savepath, [basename sprintf('_%03d_logAI', n) '.csv']);
-
-    if exist(logAIFile, 'file') == 2
-        delete(logAIFile);
-    end
-
+function [dataFile, calibFile, logAIFile] = get_save_paths(handles)
+    dataFile = fullfile(handles.savepath, 'data.mat');
+    calibFile = fullfile(handles.savepath, 'calibration.jpg');
+    logAIFile = fullfile(handles.savepath, 'logAI.csv');
 end
 
 % Validate settings
@@ -455,7 +432,7 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
                     handles.cam_pop
                     handles.snap_btn
                     handles.calibframe_btn
-                    handles.save_txt
+                    handles.savepath
                     handles.callback_txt
                     handles.ai_logging_check
                     handles.ao_waveform_btn
@@ -463,7 +440,7 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
                     handles.ao_waveform_txt
                     handles.callback_clear_btn
                     handles.callback_btn
-                    handles.save_btn];
+                    handles.savepath_btn];
 
         for control = confControls
             set(control, 'Enable', 'off');
@@ -474,7 +451,7 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
 
         if settings_are_valid(handles)
             % Get save paths
-            [saveFile, calibFile, logAIFile] = get_save_paths(handles);
+            [dataFile, calibFile, logAIFile] = get_save_paths(handles);
 
             if (ai_logging_is_enabled(handles))
                 % Add listener for analog input logging
@@ -682,7 +659,7 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
 
             % Save data
             if j > 0
-                save_data(sig(1:j, :), ref(1:j, :), handles.labels, rate, handles.calibImg.cdata, saveFile, calibFile);
+                save_data(sig(1:j, :), ref(1:j, :), handles.labels, rate, handles.calibImg.cdata, dataFile, calibFile);
             else
                 warning(['No frames captured or saved! Check camera trigger connection is ' handles.camCh.Terminal '. Then restart MATLAB.']); beep;
             end
@@ -703,8 +680,8 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
 
 end
 
-function save_data(sig, ref, labels, framerate, cdata, saveFile, calibFile)
-    save(saveFile, 'sig', 'ref', 'labels', 'framerate', '-v7.3');
+function save_data(sig, ref, labels, framerate, cdata, dataFile, calibFile)
+    save(dataFile, 'sig', 'ref', 'labels', 'framerate', '-v7.3');
 
     if any(cdata(:))
         imwrite(cdata, calibFile, 'JPEG');
@@ -909,8 +886,8 @@ function cam_pop_CreateFcn(hObject, eventdata, handles)
 end
 
 % --- Executes during object creation, after setting all properties.
-function save_txt_CreateFcn(hObject, eventdata, handles)
-    % hObject    handle to save_txt (see GCBO)
+function savepath_CreateFcn(hObject, eventdata, handles)
+    % hObject    handle to savepath (see GCBO)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    empty - handles not created until after all CreateFcns called
 
@@ -936,15 +913,13 @@ function callback_txt_CreateFcn(hObject, eventdata, handles)
 
 end
 
-% --- Executes on button press in save_btn.
-function save_btn_Callback(hObject, eventdata, handles)
-    % hObject    handle to save_btn (see GCBO)
+% --- Executes on button press in savepath_btn.
+function savepath_btn_Callback(hObject, eventdata, handles)
+    % hObject    handle to savepath_btn (see GCBO)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
-    [filename, pathname] = uiputfile('experiment.mat', 'Save experiment .mat file');
-    handles.savepath = pathname;
-    handles.savefile = filename;
-    set(handles.save_txt, 'String', fullfile([pathname filename]));
+    selpath = uigetdir('.', 'Top-level data dir');
+    set(handles.savepath, 'String', selpath);
 
     % Update handles structure
     guidata(hObject, handles);
@@ -972,19 +947,13 @@ function callback_btn_Callback(hObject, eventdata, handles)
     verify_callback_function(handles);
 end
 
-function save_txt_Callback(hObject, eventdata, handles)
+function savepath_Callback(hObject, eventdata, handles)
     % hObject    handle to save_txt (see GCBO)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
 
     % Hints: get(hObject,'String') returns contents of save_txt as text
     %        str2double(get(hObject,'String')) returns contents of save_txt as a double
-    [path, file, ext] = fileparts(get(hObject, 'String'));
-    handles.savepath = path;
-    handles.savefile = [file ext];
-
-    % Update handles structure
-    guidata(hObject, handles);
 end
 
 function callback_txt_Callback(hObject, eventdata, handles)
@@ -1042,7 +1011,7 @@ function fipgui_CloseRequestFcn(hObject, eventdata, handles)
     setpref(grp, 'sig_pop', get(handles.sig_pop, 'Value'));
     setpref(grp, 'rate_txt', get(handles.rate_txt, 'String'));
     setpref(grp, 'cam_pop', get(handles.cam_pop, 'Value'));
-    setpref(grp, 'save_txt', get(handles.save_txt, 'String'));
+    setpref(grp, 'savepath', get(handles.savepath, 'String'));
     setpref(grp, 'callback_txt', get(handles.callback_txt, 'String'));
     setpref(grp, 'ao_waveform_txt', get(handles.ao_waveform_txt, 'String'));
     setpref(grp, 'ai_logging_check', get(handles.ai_logging_check, 'Value'));
