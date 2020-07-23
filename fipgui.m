@@ -22,7 +22,7 @@ function varargout = fipgui(varargin)
 
     % Edit the above text to modify the response to help fipgui
 
-    % Last Modified by GUIDE v2.5 23-Jul-2020 09:16:54
+    % Last Modified by GUIDE v2.5 23-Jul-2020 10:44:09
 
     % Begin initialization code - DO NOT EDIT
     gui_Singleton = 1;
@@ -110,9 +110,9 @@ function fipgui_OpeningFcn(hObject, eventdata, handles, varargin)
     set(handles.rate_txt, 'String', rate_txt);
     set(handles.cam_pop, 'Value', getpref(grp, 'cam_pop', get(handles.cam_pop, 'Value')));
 
-    selpath = getpref(grp, 'savepath', get(handles.savepath, 'String'))
-    mkdir(selpath);
-    set(handles.savepath, 'String', selpath);
+    set(handles.savepath, 'String', getpref(grp, 'savepath', get(handles.savepath, 'String')));
+    set(handles.sunet_id, 'String', getpref(grp, 'sunet_id', get(handles.sunet_id, 'String')));
+    set(handles.experiment, 'String', getpref(grp, 'experiment', get(handles.experiment, 'String')));
 
     ao_waveform_txt = getpref(grp, 'ao_waveform_txt', get(handles.ao_waveform_txt, 'String'));
 
@@ -331,9 +331,18 @@ end
 % Get file paths for saving out put (auto-increment the file counter).
 function [dataFile, calibFile, logAIFile] = get_save_paths(handles)
     base_path = get(handles.savepath, 'String');
-    dataFile = fullfile(base_path, 'data.mat');
-    calibFile = fullfile(base_path, 'calibration.jpg');
-    logAIFile = fullfile(base_path, 'logAI.csv');
+    sunet_id = get(handles.sunet_id, 'String');
+
+    experiment = get(handles.experiment, 'String');
+    dt = datestr(datetime('now'), 'yyyymmdd-HHMMSS');
+    base_name = [experiment '_' dt];
+    
+    data_path = fullfile(base_path, sunet_id, base_name);
+    mkdir(data_path);
+
+    dataFile = fullfile(data_path, [basename '_data.mat']);
+    calibFile = fullfile(data_path, [basename '_calibration.jpg']);
+    logAIFile = fullfile(data_path, [basename '_logAI.csv']);
 end
 
 % Validate settings
@@ -436,6 +445,8 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
                     handles.snap_btn
                     handles.calibframe_btn
                     handles.savepath
+                    handles.sunet_id
+                    handles.experiment
                     handles.callback_txt
                     handles.ai_logging_check
                     handles.ao_waveform_btn
@@ -922,7 +933,6 @@ function savepath_btn_Callback(hObject, eventdata, handles)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
     selpath = uigetdir('.', 'Top-level data dir');
-    mkdir(selpath);
     set(handles.savepath, 'String', selpath);
 
     % Update handles structure
@@ -1016,6 +1026,8 @@ function fipgui_CloseRequestFcn(hObject, eventdata, handles)
     setpref(grp, 'rate_txt', get(handles.rate_txt, 'String'));
     setpref(grp, 'cam_pop', get(handles.cam_pop, 'Value'));
     setpref(grp, 'savepath', get(handles.savepath, 'String'));
+    setpref(grp, 'sunet_id', get(handles.sunet_id, 'String'));
+    setpref(grp, 'experiment', get(handles.experiment, 'String'));
     setpref(grp, 'callback_txt', get(handles.callback_txt, 'String'));
     setpref(grp, 'ao_waveform_txt', get(handles.ao_waveform_txt, 'String'));
     setpref(grp, 'ai_logging_check', get(handles.ai_logging_check, 'Value'));
@@ -1111,4 +1123,48 @@ end
 % Hint: get(hObject,'Value') returns toggle state of ai_logging_check
 function is_enabled = ai_logging_is_enabled(handles)
     is_enabled = get(handles.ai_logging_check, 'Value');
+end
+
+function sunet_id_Callback(hObject, eventdata, handles)
+    % hObject    handle to sunet_id (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+
+    % Hints: get(hObject,'String') returns contents of sunet_id as text
+    %        str2double(get(hObject,'String')) returns contents of sunet_id as a double
+end
+
+% --- Executes during object creation, after setting all properties.
+function sunet_id_CreateFcn(hObject, eventdata, handles)
+    % hObject    handle to sunet_id (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    empty - handles not created until after all CreateFcns called
+
+    % Hint: edit controls usually have a white background on Windows.
+    %       See ISPC and COMPUTER.
+    if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+        set(hObject,'BackgroundColor','white');
+    end
+end
+
+function experiment_Callback(hObject, eventdata, handles)
+    % hObject    handle to experiment (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+
+    % Hints: get(hObject,'String') returns contents of experiment as text
+    %        str2double(get(hObject,'String')) returns contents of experiment as a double
+end
+
+% --- Executes during object creation, after setting all properties.
+function experiment_CreateFcn(hObject, eventdata, handles)
+    % hObject    handle to experiment (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    empty - handles not created until after all CreateFcns called
+
+    % Hint: edit controls usually have a white background on Windows.
+    %       See ISPC and COMPUTER.
+    if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+        set(hObject,'BackgroundColor','white');
+    end
 end
