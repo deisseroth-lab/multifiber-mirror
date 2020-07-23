@@ -110,7 +110,9 @@ function fipgui_OpeningFcn(hObject, eventdata, handles, varargin)
     set(handles.rate_txt, 'String', rate_txt);
     set(handles.cam_pop, 'Value', getpref(grp, 'cam_pop', get(handles.cam_pop, 'Value')));
 
-    set(handles.savepath, 'String', getpref(grp, 'savepath', get(handles.savepath, 'String')));
+    selpath = getpref(grp, 'savepath', get(handles.savepath, 'String'))
+    mkdir(selpath);
+    set(handles.savepath, 'String', selpath);
 
     ao_waveform_txt = getpref(grp, 'ao_waveform_txt', get(handles.ao_waveform_txt, 'String'));
 
@@ -328,9 +330,10 @@ end
 
 % Get file paths for saving out put (auto-increment the file counter).
 function [dataFile, calibFile, logAIFile] = get_save_paths(handles)
-    dataFile = fullfile(handles.savepath, 'data.mat');
-    calibFile = fullfile(handles.savepath, 'calibration.jpg');
-    logAIFile = fullfile(handles.savepath, 'logAI.csv');
+    base_path = get(handles.savepath, 'String');
+    dataFile = fullfile(base_path, 'data.mat');
+    calibFile = fullfile(base_path, 'calibration.jpg');
+    logAIFile = fullfile(base_path, 'logAI.csv');
 end
 
 % Validate settings
@@ -919,6 +922,7 @@ function savepath_btn_Callback(hObject, eventdata, handles)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
     selpath = uigetdir('.', 'Top-level data dir');
+    mkdir(selpath);
     set(handles.savepath, 'String', selpath);
 
     % Update handles structure
@@ -1093,7 +1097,8 @@ function viewlog_btn_Callback(hObject, eventdata, handles)
     % hObject    handle to viewlog_btn (see GCBO)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
-    plotLogFile(handles.savepath, true);
+    [dataFile, calibFile, logAIFile] = get_save_paths(handles);
+    plotLogFile(logAIFile);
 end
 
 % --- Executes on button press in ai_logging_check.
