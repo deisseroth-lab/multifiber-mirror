@@ -469,7 +469,7 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
             rate = str2double(get(handles.rate_txt, 'String'));
 
             [acquisitionDir, dataFile, metadataFile, calibFile, logAIFile] = get_save_details(handles);
-            set(handles.acquisition_name, 'String', acquisitionDir);
+            set(handles.acquisition_dir, 'String', acquisitionDir);
 
             save_metadata(metadataFile, handles.labels, rate);
             save_calibration(calibFile, handles.calibImg.cdata);
