@@ -45,10 +45,6 @@ classdef circularBuffer < double
                     objDouble = double(obj);
                     %%%%%%%%%%%% -Create Proper Indices- %%%%%%%%%%%%
                     sizePerDimension = size(objDouble);
-                    %% -If Object is Column/Row vector, then make all elements in sizePerDimension to max dimension
-                    if(numel(sizePerDimension)<=2 && min(sizePerDimension)==1)
-                        sizePerDimension = max(sizePerDimension);
-                    end
                     %% -For single input, access the matrix object as a vector
                     if(numel(s(1).subs)==1)
                         sizePerDimension = numel(objDouble);
@@ -76,10 +72,6 @@ classdef circularBuffer < double
                 objDouble = double(obj);                            %% -TODO: For Speeding up, entire object conversion should be avoided ...
                     %%%%%%%%%%%% -Create Proper Indices- %%%%%%%%%%%%
                     sizePerDimension = size(objDouble);
-                    %% -If Object is Column/Row vector, then make all elements in sizePerDimension to max dimension
-                    if(numel(sizePerDimension)<=2 && min(sizePerDimension)==1)
-                        sizePerDimension = max(sizePerDimension);
-                    end
                     %% -For single input, access the matrix object as a vector
                     if(numel(s(1).subs)==1)
                         sizePerDimension = numel(objDouble);
