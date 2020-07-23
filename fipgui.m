@@ -722,7 +722,7 @@ end
 
 function save_data(dataFile, chunk, sig, ref)
     [spath, fname, ext] = fileparts(dataFile);
-    final_file = fullfile(spath, [fname sprintf('_%03d_', chunk) ext]);
+    final_file = fullfile(spath, [fname sprintf('_%03d', chunk) ext]);
     save(final_file, 'sig', 'ref', '-v7.3');
 end
 
