@@ -328,8 +328,7 @@ function calibframe_btn_Callback(hObject, eventdata, handles)
     guidata(hObject, handles);
 end
 
-% Get file paths for saving out put (auto-increment the file counter).
-function [dataFile, calibFile, logAIFile] = get_save_paths(handles)
+function [dataFile, metadataFile, calibFile, logAIFile] = get_save_paths(handles)
     base_path = get(handles.savepath, 'String');
     sunet_id = get(handles.sunet_id, 'String');
 
@@ -341,6 +340,7 @@ function [dataFile, calibFile, logAIFile] = get_save_paths(handles)
     mkdir(data_path);
 
     dataFile = fullfile(data_path, [base_name '_data.mat']);
+    metadataFile = fullfile(data_path, [base_name '_metadata.mat']);
     calibFile = fullfile(data_path, [base_name '_calibration.jpg']);
     logAIFile = fullfile(data_path, [base_name '_logAI.csv']);
 end
@@ -465,7 +465,10 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
 
         if settings_are_valid(handles)
             % Get save paths
-            [dataFile, calibFile, logAIFile] = get_save_paths(handles);
+            [dataFile, metadataFile, calibFile, logAIFile] = get_save_paths(handles);
+
+            save_metadata(metadataFile, handles.labels, rate);
+            save_calibration(calibFile, handles.calibImg.cdata);
 
             if (ai_logging_is_enabled(handles))
                 % Add listener for analog input logging
@@ -483,11 +486,18 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
             else
                 darkOffset = applyMasks(handles.masks, darkframe);
             end
-
+            
             nMasks = size(handles.masks, 3);
-            ref = zeros(1, nMasks); sig = zeros(1, nMasks);
+
+            chunk_size = 100;
+            ref = circularBuffer(zeros(2*chunk_size, nMasks)); 
+            sig = circularBuffer(zeros(2*chunk_size, nMasks));
+
             i = 0;
             j = 0;
+            chunk = 1;
+            last_save = 1;
+
             rate = str2double(get(handles.rate_txt, 'String'));
             lookback = handles.plotLookback;
             framesback = lookback * rate / 2;
@@ -578,18 +588,18 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
                 avgs = applyMasks(handles.masks, img);
                 avgs = avgs - darkOffset;
 
-                % Exponentially expanding matrix as per std::vector
-                if j > size(ref, 1) || j > size(sig, 1)
-                    szr = size(ref); szs = size(sig);
-                    ref = [ref; zeros(szr)]; sig = [sig; zeros(szs)];
-                end
-
                 if mod(i, 2) == 1% reference channel
                     ref(j, :) = avgs;
                     handles.callback(avgs, 'reference');
                 else % signal channel
                     sig(j, :) = avgs;
                     handles.callback(avgs, 'signal');
+                    
+                    if (j > 1) & (mod(j, chunk_size) == 0)
+                        save_data(dataFile, chunk, sig(last_save:j, :), ref(last_save:j, :));
+                        chunk = chunk + 1;
+                        last_save = last_save + chunk_size;
+                    end
                 end
 
                 % Plotting
@@ -673,7 +683,7 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
 
             % Save data
             if j > 0
-                save_data(sig(1:j, :), ref(1:j, :), handles.labels, rate, handles.calibImg.cdata, dataFile, calibFile);
+                save_data(dataFile, chunk, sig(last_save:j, :), ref(last_save:j, :));
             else
                 warning(['No frames captured or saved! Check camera trigger connection is ' handles.camCh.Terminal '. Then restart MATLAB.']); beep;
             end
@@ -694,13 +704,20 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
 
 end
 
-function save_data(sig, ref, labels, framerate, cdata, dataFile, calibFile)
-    save(dataFile, 'sig', 'ref', 'labels', 'framerate', '-v7.3');
+function save_metadata(metadataFile, labels, framerate)
+    save(metadataFile, 'labels', 'framerate', '-v7.3')
+end
 
+function save_calibration(calibFile, cdata)
     if any(cdata(:))
-        imwrite(cdata, calibFile, 'JPEG');
+        imwrite(cdata, calibFile, 'JPEG')
     end
+end
 
+function save_data(dataFile, chunk, sig, ref)
+    [spath, file, ext] = fileparts(dataFile);
+    final_file = fullfile(spath, [fname sprintf('_%03d_', chunk) ext]);
+    save(final_file, 'sig', 'ref', '-v7.3');
 end
 
 % --- Executes during object creation, after setting all properties.
@@ -1109,7 +1126,7 @@ function viewlog_btn_Callback(hObject, eventdata, handles)
     % hObject    handle to viewlog_btn (see GCBO)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
-    [dataFile, calibFile, logAIFile] = get_save_paths(handles);
+    [dataFile, metadataFile, calibFile, logAIFile] = get_save_paths(handles);
     plotLogFile(logAIFile);
 end
 
