@@ -22,7 +22,7 @@ function varargout = fipgui(varargin)
 
     % Edit the above text to modify the response to help fipgui
 
-    % Last Modified by GUIDE v2.5 07-Dec-2015 14:59:52
+    % Last Modified by GUIDE v2.5 23-Jul-2020 10:44:09
 
     % Begin initialization code - DO NOT EDIT
     gui_Singleton = 1;
@@ -64,8 +64,6 @@ function fipgui_OpeningFcn(hObject, eventdata, handles, varargin)
     % Defaults
     handles.crop_roi = false;
     handles.masks = false;
-    handles.savepath = '.';
-    handles.savefile = get(handles.save_txt, 'String');
     handles.callback_path = false;
     handles.callback = @(x, y) false;
     handles.ao_waveform_path = false;
@@ -111,14 +109,11 @@ function fipgui_OpeningFcn(hObject, eventdata, handles, varargin)
 
     set(handles.rate_txt, 'String', rate_txt);
     set(handles.cam_pop, 'Value', getpref(grp, 'cam_pop', get(handles.cam_pop, 'Value')));
-    save_txt = getpref(grp, 'save_txt', get(handles.save_txt, 'String'));
 
-    if numel(save_txt) > 1 && save_txt(1) == '0'
-        save_txt = '';
-        warning(['Invalid save text, setting to default value of ' save_txt]);
-    end
+    set(handles.savepath, 'String', getpref(grp, 'savepath', get(handles.savepath, 'String')));
+    set(handles.sunet_id, 'String', getpref(grp, 'sunet_id', get(handles.sunet_id, 'String')));
+    set(handles.experiment, 'String', getpref(grp, 'experiment', get(handles.experiment, 'String')));
 
-    set(handles.save_txt, 'String', save_txt);
     ao_waveform_txt = getpref(grp, 'ao_waveform_txt', get(handles.ao_waveform_txt, 'String'));
 
     if numel(ao_waveform_txt) > 1 && ao_waveform_txt(1) == '0'
@@ -207,10 +202,6 @@ function fipgui_OpeningFcn(hObject, eventdata, handles, varargin)
     % Some more updates based on the defaults loaded earlier
     % Update rate
     rate_txt_Callback(handles.rate_txt, [], handles);
-    % Update save file information
-    [pathname, filename, ext] = fileparts(get(handles.save_txt, 'String'));
-    handles.savepath = pathname;
-    handles.savefile = [filename ext];
 
     % Update callback file information
     [pathname, filename] = fileparts(get(handles.callback_txt, 'String'));
@@ -337,23 +328,21 @@ function calibframe_btn_Callback(hObject, eventdata, handles)
     guidata(hObject, handles);
 end
 
-% Get file paths for saving out put (auto-increment the file counter).
-function [saveFile, calibFile, logAIFile] = get_save_paths(handles)
-    [~, basename, ext] = fileparts(handles.savefile);
-    n = 0;
+function [acquisitionPath, dataFile, metadataFile, calibFile, logAIFile] = get_save_details(handles)
+    base_path = get(handles.savepath, 'String');
+    sunet_id = get(handles.sunet_id, 'String');
 
-    while exist(fullfile(handles.savepath, [basename sprintf('_%03d', n) ext]), 'file') == 2
-        n = n + 1;
-    end
+    experiment = get(handles.experiment, 'String');
+    dt = datestr(datetime('now'), 'yyyymmdd-HHMMSS');
+    baseName = [experiment '_' dt];
+    
+    acquisitionPath = fullfile(base_path, sunet_id, baseName);
+    mkdir(acquisitionPath);
 
-    saveFile = fullfile(handles.savepath, [basename sprintf('_%03d', n) ext]);
-    calibFile = fullfile(handles.savepath, [basename sprintf('_%03d_calibration', n) '.jpg']);
-    logAIFile = fullfile(handles.savepath, [basename sprintf('_%03d_logAI', n) '.csv']);
-
-    if exist(logAIFile, 'file') == 2
-        delete(logAIFile);
-    end
-
+    dataFile = fullfile(acquisitionPath, [baseName '_data.mat']);
+    metadataFile = fullfile(acquisitionPath, [baseName '_metadata.mat']);
+    calibFile = fullfile(acquisitionPath, [baseName '_calibration.jpg']);
+    logAIFile = fullfile(acquisitionPath, [baseName '_logAI.csv']);
 end
 
 % Validate settings
@@ -435,6 +424,8 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
 
+    addpath('utils');  % for circularBuffer
+
     % Hint: get(hObject,'Value') returns toggle state of acquire_tgl
     state = get(hObject, 'Value');
 
@@ -455,7 +446,9 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
                     handles.cam_pop
                     handles.snap_btn
                     handles.calibframe_btn
-                    handles.save_txt
+                    handles.savepath
+                    handles.sunet_id
+                    handles.experiment
                     handles.callback_txt
                     handles.ai_logging_check
                     handles.ao_waveform_btn
@@ -463,7 +456,7 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
                     handles.ao_waveform_txt
                     handles.callback_clear_btn
                     handles.callback_btn
-                    handles.save_btn];
+                    handles.savepath_btn];
 
         for control = confControls
             set(control, 'Enable', 'off');
@@ -473,8 +466,13 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
         set(hObject, 'String', 'Stop acquisition');
 
         if settings_are_valid(handles)
-            % Get save paths
-            [saveFile, calibFile, logAIFile] = get_save_paths(handles);
+            rate = str2double(get(handles.rate_txt, 'String'));
+
+            [acquisitionDir, dataFile, metadataFile, calibFile, logAIFile] = get_save_details(handles);
+            set(handles.acquisition_dir, 'String', acquisitionDir);
+
+            save_metadata(metadataFile, handles.labels, rate);
+            save_calibration(calibFile, handles.calibImg.cdata);
 
             if (ai_logging_is_enabled(handles))
                 % Add listener for analog input logging
@@ -492,14 +490,24 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
             else
                 darkOffset = applyMasks(handles.masks, darkframe);
             end
-
+            
             nMasks = size(handles.masks, 3);
-            ref = zeros(1, nMasks); sig = zeros(1, nMasks);
-            i = 0;
-            j = 0;
-            rate = str2double(get(handles.rate_txt, 'String'));
+
             lookback = handles.plotLookback;
             framesback = lookback * rate / 2;
+
+            chunk_time = 15 * 60;
+            chunk_size = chunk_time * rate / 2;
+
+            buffer_size = max(framesback, chunk_size);
+            ref = circularBuffer(zeros(buffer_size, nMasks)); 
+            sig = circularBuffer(zeros(buffer_size, nMasks));
+
+            i = 0;
+            j = 0;
+            chunk = 1;
+            last_save = 1;
+
             vid = handles.vid;
             s = handles.s;
 
@@ -587,18 +595,18 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
                 avgs = applyMasks(handles.masks, img);
                 avgs = avgs - darkOffset;
 
-                % Exponentially expanding matrix as per std::vector
-                if j > size(ref, 1) || j > size(sig, 1)
-                    szr = size(ref); szs = size(sig);
-                    ref = [ref; zeros(szr)]; sig = [sig; zeros(szs)];
-                end
-
                 if mod(i, 2) == 1% reference channel
                     ref(j, :) = avgs;
                     handles.callback(avgs, 'reference');
                 else % signal channel
                     sig(j, :) = avgs;
                     handles.callback(avgs, 'signal');
+                    
+                    if (j > 1) & (mod(j, chunk_size) == 0)
+                        save_data(dataFile, chunk, sig(last_save:j, :), ref(last_save:j, :));
+                        chunk = chunk + 1;
+                        last_save = last_save + chunk_size;
+                    end
                 end
 
                 % Plotting
@@ -645,7 +653,6 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
 
                 % Check to make sure camera acquisition is keeping up.
                 elapsed_time = (now() - handles.startTime());
-                rate = str2double(get(handles.rate_txt, 'String'));
 
                 if abs(elapsed_time * 24 * 3600 - (i) / rate) > 1% if camera acquisition falls behind more than 1 s...
                     fraction_frames_acquired = i / (elapsed_time * 24 * 3600 * rate);
@@ -682,7 +689,7 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
 
             % Save data
             if j > 0
-                save_data(sig(1:j, :), ref(1:j, :), handles.labels, rate, handles.calibImg.cdata, saveFile, calibFile);
+                save_data(dataFile, chunk, sig(last_save:j, :), ref(last_save:j, :));
             else
                 warning(['No frames captured or saved! Check camera trigger connection is ' handles.camCh.Terminal '. Then restart MATLAB.']); beep;
             end
@@ -703,13 +710,20 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
 
 end
 
-function save_data(sig, ref, labels, framerate, cdata, saveFile, calibFile)
-    save(saveFile, 'sig', 'ref', 'labels', 'framerate', '-v7.3');
+function save_metadata(metadataFile, labels, framerate)
+    save(metadataFile, 'labels', 'framerate', '-v7.3')
+end
 
+function save_calibration(calibFile, cdata)
     if any(cdata(:))
-        imwrite(cdata, calibFile, 'JPEG');
+        imwrite(cdata, calibFile, 'JPEG')
     end
+end
 
+function save_data(dataFile, chunk, sig, ref)
+    [spath, fname, ext] = fileparts(dataFile);
+    final_file = fullfile(spath, [fname sprintf('_%03d', chunk) ext]);
+    save(final_file, 'sig', 'ref', '-v7.3');
 end
 
 % --- Executes during object creation, after setting all properties.
@@ -909,8 +923,8 @@ function cam_pop_CreateFcn(hObject, eventdata, handles)
 end
 
 % --- Executes during object creation, after setting all properties.
-function save_txt_CreateFcn(hObject, eventdata, handles)
-    % hObject    handle to save_txt (see GCBO)
+function savepath_CreateFcn(hObject, eventdata, handles)
+    % hObject    handle to savepath (see GCBO)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    empty - handles not created until after all CreateFcns called
 
@@ -936,15 +950,13 @@ function callback_txt_CreateFcn(hObject, eventdata, handles)
 
 end
 
-% --- Executes on button press in save_btn.
-function save_btn_Callback(hObject, eventdata, handles)
-    % hObject    handle to save_btn (see GCBO)
+% --- Executes on button press in savepath_btn.
+function savepath_btn_Callback(hObject, eventdata, handles)
+    % hObject    handle to savepath_btn (see GCBO)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
-    [filename, pathname] = uiputfile('experiment.mat', 'Save experiment .mat file');
-    handles.savepath = pathname;
-    handles.savefile = filename;
-    set(handles.save_txt, 'String', fullfile([pathname filename]));
+    selpath = uigetdir('.', 'Top-level data dir');
+    set(handles.savepath, 'String', selpath);
 
     % Update handles structure
     guidata(hObject, handles);
@@ -972,19 +984,13 @@ function callback_btn_Callback(hObject, eventdata, handles)
     verify_callback_function(handles);
 end
 
-function save_txt_Callback(hObject, eventdata, handles)
+function savepath_Callback(hObject, eventdata, handles)
     % hObject    handle to save_txt (see GCBO)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
 
     % Hints: get(hObject,'String') returns contents of save_txt as text
     %        str2double(get(hObject,'String')) returns contents of save_txt as a double
-    [path, file, ext] = fileparts(get(hObject, 'String'));
-    handles.savepath = path;
-    handles.savefile = [file ext];
-
-    % Update handles structure
-    guidata(hObject, handles);
 end
 
 function callback_txt_Callback(hObject, eventdata, handles)
@@ -1042,7 +1048,9 @@ function fipgui_CloseRequestFcn(hObject, eventdata, handles)
     setpref(grp, 'sig_pop', get(handles.sig_pop, 'Value'));
     setpref(grp, 'rate_txt', get(handles.rate_txt, 'String'));
     setpref(grp, 'cam_pop', get(handles.cam_pop, 'Value'));
-    setpref(grp, 'save_txt', get(handles.save_txt, 'String'));
+    setpref(grp, 'savepath', get(handles.savepath, 'String'));
+    setpref(grp, 'sunet_id', get(handles.sunet_id, 'String'));
+    setpref(grp, 'experiment', get(handles.experiment, 'String'));
     setpref(grp, 'callback_txt', get(handles.callback_txt, 'String'));
     setpref(grp, 'ao_waveform_txt', get(handles.ao_waveform_txt, 'String'));
     setpref(grp, 'ai_logging_check', get(handles.ai_logging_check, 'Value'));
@@ -1124,7 +1132,8 @@ function viewlog_btn_Callback(hObject, eventdata, handles)
     % hObject    handle to viewlog_btn (see GCBO)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
-    plotLogFile(handles.savepath, true);
+    [acquisitionDir, dataFile, metadataFile, calibFile, logAIFile] = get_save_details(handles);
+    plotLogFile(logAIFile);
 end
 
 % --- Executes on button press in ai_logging_check.
@@ -1137,4 +1146,48 @@ end
 % Hint: get(hObject,'Value') returns toggle state of ai_logging_check
 function is_enabled = ai_logging_is_enabled(handles)
     is_enabled = get(handles.ai_logging_check, 'Value');
+end
+
+function sunet_id_Callback(hObject, eventdata, handles)
+    % hObject    handle to sunet_id (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+
+    % Hints: get(hObject,'String') returns contents of sunet_id as text
+    %        str2double(get(hObject,'String')) returns contents of sunet_id as a double
+end
+
+% --- Executes during object creation, after setting all properties.
+function sunet_id_CreateFcn(hObject, eventdata, handles)
+    % hObject    handle to sunet_id (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    empty - handles not created until after all CreateFcns called
+
+    % Hint: edit controls usually have a white background on Windows.
+    %       See ISPC and COMPUTER.
+    if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+        set(hObject,'BackgroundColor','white');
+    end
+end
+
+function experiment_Callback(hObject, eventdata, handles)
+    % hObject    handle to experiment (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    structure with handles and user data (see GUIDATA)
+
+    % Hints: get(hObject,'String') returns contents of experiment as text
+    %        str2double(get(hObject,'String')) returns contents of experiment as a double
+end
+
+% --- Executes during object creation, after setting all properties.
+function experiment_CreateFcn(hObject, eventdata, handles)
+    % hObject    handle to experiment (see GCBO)
+    % eventdata  reserved - to be defined in a future version of MATLAB
+    % handles    empty - handles not created until after all CreateFcns called
+
+    % Hint: edit controls usually have a white background on Windows.
+    %       See ISPC and COMPUTER.
+    if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+        set(hObject,'BackgroundColor','white');
+    end
 end
