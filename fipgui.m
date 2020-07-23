@@ -424,6 +424,8 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
     % eventdata  reserved - to be defined in a future version of MATLAB
     % handles    structure with handles and user data (see GUIDATA)
 
+    addpath('utils');  % for circularBuffer
+
     % Hint: get(hObject,'Value') returns toggle state of acquire_tgl
     state = get(hObject, 'Value');
 
@@ -464,6 +466,8 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
         set(hObject, 'String', 'Stop acquisition');
 
         if settings_are_valid(handles)
+            rate = str2double(get(handles.rate_txt, 'String'));
+
             % Get save paths
             [dataFile, metadataFile, calibFile, logAIFile] = get_save_paths(handles);
 
@@ -489,18 +493,21 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
             
             nMasks = size(handles.masks, 3);
 
-            chunk_size = 100;
-            ref = circularBuffer(zeros(2*chunk_size, nMasks)); 
-            sig = circularBuffer(zeros(2*chunk_size, nMasks));
+            lookback = handles.plotLookback;
+            framesback = lookback * rate / 2;
+
+            chunk_time = 15 * 60;
+            chunk_size = chunk_time * rate / 2;
+
+            buffer_size = max(framesback, chunk_size);
+            ref = circularBuffer(zeros(buffer_size, nMasks)); 
+            sig = circularBuffer(zeros(buffer_size, nMasks));
 
             i = 0;
             j = 0;
             chunk = 1;
             last_save = 1;
 
-            rate = str2double(get(handles.rate_txt, 'String'));
-            lookback = handles.plotLookback;
-            framesback = lookback * rate / 2;
             vid = handles.vid;
             s = handles.s;
 
@@ -646,7 +653,6 @@ function acquire_tgl_Callback(hObject, eventdata, handles)
 
                 % Check to make sure camera acquisition is keeping up.
                 elapsed_time = (now() - handles.startTime());
-                rate = str2double(get(handles.rate_txt, 'String'));
 
                 if abs(elapsed_time * 24 * 3600 - (i) / rate) > 1% if camera acquisition falls behind more than 1 s...
                     fraction_frames_acquired = i / (elapsed_time * 24 * 3600 * rate);
@@ -715,7 +721,7 @@ function save_calibration(calibFile, cdata)
 end
 
 function save_data(dataFile, chunk, sig, ref)
-    [spath, file, ext] = fileparts(dataFile);
+    [spath, fname, ext] = fileparts(dataFile);
     final_file = fullfile(spath, [fname sprintf('_%03d_', chunk) ext]);
     save(final_file, 'sig', 'ref', '-v7.3');
 end
